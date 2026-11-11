@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบตรวจสอบประกาศยกเลิกโฉนดและเลขที่ดินอัตโนมัติ</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- SheetJS (XLSX) -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <!-- PDF.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    </script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Google Font (Sarabun) -->
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Sarabun', sans-serif; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="bg-indigo-700 text-white shadow-md">
+        <div class="max-w-7xl mx-auto px-4 py-4 flex flex-col md:flex-row justify-between items-center">
+            <div class="flex items-center space-x-3 mb-2 md:mb-0">
+                <div class="bg-white/10 p-2.5 rounded-xl backdrop-blur-sm">
+                    <i data-lucide="file-search" class="w-8 h-8 text-indigo-100"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-wide">ระบบตรวจสอบประกาศยกเลิกที่ดิน</h1>
+                    <p class="text-xs text-indigo-200">รองรับแบบโฉนดที่ดิน, แบบเรียงเลขที่ดิน และเงื่อนไขเล่มจากชื่อไฟล์ PDF</p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-2 text-xs bg-indigo-800/60 px-3 py-1.5 rounded-lg border border-indigo-600">
+                <i data-lucide="shield-check" class="w-4 h-4 text-emerald-400"></i>
+                <span>ประมวลผลปลอดภัยบน 100% Client-side Browser</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 py-6 space-y-6">
+
+        <!-- Step 1: File Upload Section -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            <!-- Excel Upload Box -->
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="font-semibold text-slate-900 flex items-center space-x-2">
+                            <i data-lucide="file-spreadsheet" class="w-5 h-5 text-emerald-600"></i>
+                            <span>1. ไฟล์ Excel (ข้อมูลโฉนด / เลขที่ดิน)</span>
+                        </h2>
+                        <span id="excelStatusBadge" class="text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-500 font-medium">ยังไม่ได้เลือกไฟล์</span>
+                    </div>
+
+                    <div id="excelDropZone" class="border-2 border-dashed border-slate-300 hover:border-emerald-500 rounded-xl p-6 text-center cursor-pointer transition bg-slate-50/50 hover:bg-emerald-50/30 relative">
+                        <input type="file" id="excelFile" accept=".xlsx, .xls" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10">
+                        <div class="flex flex-col items-center pointer-events-none space-y-2">
+                            <div class="p-3 bg-emerald-100 text-emerald-600 rounded-full">
+                                <i data-lucide="upload-cloud" class="w-6 h-6"></i>
+                            </div>
+                            <p class="text-sm font-medium text-slate-700">ลากไฟล์ Excel มาวางที่นี่ หรือ <span class="text-emerald-600 underline">คลิกเพื่อเลือกไฟล์</span></p>
+                            <p class="text-xs text-slate-400">รองรับนามสกุล .xlsx, .xls</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="excelFileInfo" class="mt-4 hidden p-3 bg-emerald-50 rounded-xl border border-emerald-100 flex items-center justify-between">
+                    <div class="flex items-center space-x-3 overflow-hidden">
+                        <i data-lucide="file-check-2" class="w-5 h-5 text-emerald-600 flex-shrink-0"></i>
+                        <span id="excelFileName" class="text-xs font-medium text-emerald-900 truncate"></span>
+                    </div>
+                    <button type="button" id="removeExcelBtn" class="text-xs text-rose-500 hover:text-rose-700 font-medium px-2 py-1 z-20 relative">ลบ</button>
+                </div>
+            </div>
+
+            <!-- PDF Upload Box (Multiple) -->
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="font-semibold text-slate-900 flex items-center space-x-2">
+                            <i data-lucide="file-text" class="w-5 h-5 text-rose-600"></i>
+                            <span>2. ไฟล์ PDF ประกาศยกเลิก (หลายไฟล์ได้)</span>
+                        </h2>
+                        <span id="pdfCountBadge" class="text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-500 font-medium">0 ไฟล์</span>
+                    </div>
+
+                    <div id="pdfDropZone" class="border-2 border-dashed border-slate-300 hover:border-rose-500 rounded-xl p-6 text-center cursor-pointer transition bg-slate-50/50 hover:bg-rose-50/30 relative">
+                        <input type="file" id="pdfFiles" accept=".pdf" multiple class="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10">
+                        <div class="flex flex-col items-center pointer-events-none space-y-2">
+                            <div class="p-3 bg-rose-100 text-rose-600 rounded-full">
+                                <i data-lucide="files" class="w-6 h-6"></i>
+                            </div>
+                            <p class="text-sm font-medium text-slate-700">ลากไฟล์ PDF หลายไฟล์มาวาง หรือ <span class="text-rose-600 underline">คลิกเลือกไฟล์</span></p>
+                            <p class="text-xs text-slate-400">ตั้งชื่อไฟล์ลงท้ายด้วยเล่ม เช่น ...-67 เพื่อกรองคอลัมน์ O อัตโนมัติ</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PDF File List -->
+                <div id="pdfFileListContainer" class="mt-4 max-h-28 overflow-y-auto space-y-1.5 hidden pr-1">
+                    <!-- Rendered via JS -->
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Action & Progress Bar -->
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row items-center justify-between gap-4">
+            <div class="w-full md:w-2/3">
+                <div class="flex justify-between text-xs font-medium text-slate-600 mb-1">
+                    <span id="progressStatusText">พร้อมสำหรับการตรวจสอบข้อมูล</span>
+                    <span id="progressPercentText">0%</span>
+                </div>
+                <div class="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+                    <div id="progressBar" class="bg-indigo-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-3 w-full md:w-auto justify-end">
+                <button id="startProcessBtn" disabled class="w-full md:w-auto px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 disabled:text-slate-400 text-white font-medium rounded-xl shadow-sm transition flex items-center justify-center space-x-2 cursor-pointer disabled:cursor-not-allowed">
+                    <i data-lucide="play" class="w-4 h-4"></i>
+                    <span>เริ่มตรวจสอบข้อมูล</span>
+                </button>
+                <button id="exportExcelBtn" disabled class="w-full md:w-auto px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 text-white font-medium rounded-xl shadow-sm transition flex items-center justify-center space-x-2 cursor-pointer disabled:cursor-not-allowed">
+                    <i data-lucide="download" class="w-4 h-4"></i>
+                    <span>ส่งออก Excel ผลลัพธ์</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Results Table Section -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <div class="p-4 border-b border-slate-200 flex flex-col md:flex-row items-center justify-between gap-4 bg-slate-50/50">
+                <div class="flex items-center space-x-3 w-full md:w-auto">
+                    <h3 class="font-semibold text-slate-900 flex items-center space-x-2">
+                        <i data-lucide="table" class="w-5 h-5 text-indigo-600"></i>
+                        <span>ผลลัพธ์การตรวจสอบ</span>
+                    </h3>
+                    <span id="resultCountBadge" class="text-xs px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-medium border border-indigo-100">0 รายการ</span>
+                </div>
+
+                <!-- Filters -->
+                <div class="flex items-center space-x-2 w-full md:w-auto">
+                    <div class="relative flex-grow md:w-64">
+                        <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
+                        <input type="text" id="searchInput" placeholder="ค้นหาโฉนด, ตำบล, ระวาง..." class="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-indigo-500">
+                    </div>
+                    <select id="filterStatus" class="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-indigo-500">
+                        <option value="all">สถานะทั้งหมด</option>
+                        <option value="found">พบประกาศยกเลิก</option>
+                        <option value="not_found">ไม่พบ</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Table Container -->
+            <div class="overflow-x-auto max-h-[500px]">
+                <table class="w-full text-left border-collapse text-xs">
+                    <thead class="bg-slate-100 text-slate-600 sticky top-0 z-10 font-semibold">
+                        <tr>
+                            <th class="p-3 border-b">ลำดับ</th>
+                            <th class="p-3 border-b">โฉนด (A)</th>
+                            <th class="p-3 border-b">ตำบล (C)</th>
+                            <th class="p-3 border-b">ระวาง UTM (G)</th>
+                            <th class="p-3 border-b">เลขที่ดิน (J)</th>
+                            <th class="p-3 border-b">เล่ม (O)</th>
+                            <th class="p-3 border-b">รูปแบบค้นหา</th>
+                            <th class="p-3 border-b">สถานะ</th>
+                            <th class="p-3 border-b">ไฟล์ PDF / หน้า</th>
+                            <th class="p-3 border-b">รายละเอียดประกาศยกเลิก</th>
+                        </tr>
+                    </thead>
+                    <tbody id="resultTableBody" class="divide-y divide-slate-100">
+                        <tr>
+                            <td colspan="10" class="text-center py-12 text-slate-400">
+                                <div class="flex flex-col items-center justify-center space-y-2">
+                                    <i data-lucide="folder-open" class="w-10 h-10 text-slate-300"></i>
+                                    <p>ยังไม่มีข้อมูล กรุณาอัปโหลดไฟล์ Excel และ PDF แล้วกดเริ่มตรวจสอบ</p>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-500">
+        ระบบตรวจสอบประกาศยกเลิกโฉนดและเลขที่ดินอัตโนมัติ © 2026
+    </footer>
+
+    <!-- Application Script -->
+    <script>
+        // Initialize Lucide Icons
+        lucide.createIcons();
+
+        let excelData = null;
+        let excelRawRows = [];
+        let excelHeader = [];
+        let pdfFilesList = [];
+        let processedResults = [];
+
+        // DOM Elements
+        const excelFileinput = document.getElementById('excelFile');
+        const excelFileInfo = document.getElementById('excelFileInfo');
+        const excelFileName = document.getElementById('excelFileName');
+        const removeExcelBtn = document.getElementById('removeExcelBtn');
+        const excelStatusBadge = document.getElementById('excelStatusBadge');
+
+        const pdfFilesInput = document.getElementById('pdfFiles');
+        const pdfFileListContainer = document.getElementById('pdfFileListContainer');
+        const pdfCountBadge = document.getElementById('pdfCountBadge');
+
+        const startProcessBtn = document.getElementById('startProcessBtn');
+        const exportExcelBtn = document.getElementById('exportExcelBtn');
+        const progressBar = document.getElementById('progressBar');
+        const progressStatusText = document.getElementById('progressStatusText');
+        const progressPercentText = document.getElementById('progressPercentText');
+
+        const resultTableBody = document.getElementById('resultTableBody');
+        const resultCountBadge = document.getElementById('resultCountBadge');
+        const searchInput = document.getElementById('searchInput');
+        const filterStatus = document.getElementById('filterStatus');
+
+        // --- EXCEL UPLOAD HANDLING ---
+        excelFileinput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                try {
+                    const data = new Uint8Array(evt.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+                    if (json.length === 0) {
+                        alert('ไฟล์ Excel ไม่มีข้อมูล');
+                        return;
+                    }
+
+                    excelHeader = json[0];
+                    excelRawRows = json.slice(1).filter(row => row.length > 0);
+                    excelData = json;
+
+                    excelFileName.textContent = file.name;
+                    excelFileInfo.classList.remove('hidden');
+                    excelStatusBadge.textContent = `โหลดแล้ว (${excelRawRows.length} แถว)`;
+                    excelStatusBadge.className = "text-xs px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 font-medium";
+                    checkReadyState();
+                } catch (err) {
+                    console.error(err);
+                    alert('เกิดข้อผิดพลาดในการอ่านไฟล์ Excel');
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        removeExcelBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            excelFileinput.value = '';
+            excelData = null;
+            excelRawRows = [];
+            excelFileInfo.classList.add('hidden');
+            excelStatusBadge.textContent = 'ยังไม่ได้เลือกไฟล์';
+            excelStatusBadge.className = "text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-500 font-medium";
+            checkReadyState();
+        });
+
+        // --- PDF UPLOAD HANDLING (Multiple) ---
+        pdfFilesInput.addEventListener('change', (e) => {
+            const files = Array.from(e.target.files);
+            if (files.length === 0) return;
+
+            files.forEach(file => {
+                // Avoid duplicates by name
+                if (!pdfFilesList.some(f => f.name === file.name)) {
+                    pdfFilesList.push(file);
+                }
+            });
+
+            renderPdfList();
+            checkReadyState();
+            pdfFilesInput.value = '';
+        });
+
+        function renderPdfList() {
+            if (pdfFilesList.length === 0) {
+                pdfFileListContainer.classList.add('hidden');
+                pdfCountBadge.textContent = '0 ไฟล์';
+                pdfCountBadge.className = "text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-500 font-medium";
+                return;
+            }
+
+            pdfFileListContainer.classList.remove('hidden');
+            pdfCountBadge.textContent = `${pdfFilesList.length} ไฟล์`;
+            pdfCountBadge.className = "text-xs px-2.5 py-1 rounded-full bg-rose-100 text-rose-700 font-medium";
+
+            pdfFileListContainer.innerHTML = '';
+            pdfFilesList.forEach((file, index) => {
+                const vol = extractVolumeFromFilename(file.name);
+                const div = document.createElement('div');
+                div.className = "flex items-center justify-between p-2 bg-rose-50/60 rounded-lg border border-rose-100 text-xs";
+                div.innerHTML = `
+                    <div class="flex items-center space-x-2 truncate">
+                        <i data-lucide="file-text" class="w-4 h-4 text-rose-600 flex-shrink-0"></i>
+                        <span class="font-medium text-slate-800 truncate">${file.name}</span>
+                        <span class="text-[10px] bg-rose-200 text-rose-800 px-1.5 py-0.5 rounded flex-shrink-0">เล่ม: ${vol || 'ไม่ระบุ'}</span>
+                    </div>
+                    <button type="button" onclick="removePdf(${index})" class="text-rose-500 hover:text-rose-700 font-medium px-1.5 py-0.5">ลบ</button>
+                `;
+                pdfFileListContainer.appendChild(div);
+            });
+            lucide.createIcons();
+        }
+
+        window.removePdf = function(index) {
+            pdfFilesList.splice(index, 1);
+            renderPdfList();
+            checkReadyState();
+        }
+
+        function checkReadyState() {
+            if (excelData && pdfFilesList.length > 0) {
+                startProcessBtn.removeAttribute('disabled');
+            } else {
+                startProcessBtn.setAttribute('disabled', 'true');
+            }
+        }
+
+        // Extract Volume Number from PDF filename (e.g. "...-67" -> "67")
+        function extractVolumeFromFilename(filename) {
+            const match = filename.match(/-(\d+)(?:\.pdf)?$/i);
+            if (match) return match[1];
+            const digits = filename.match(/\d+/g);
+            return digits ? digits[digits.length - 1] : '';
+        }
+
+        // --- PROCESSING ENGINE ---
+        startProcessBtn.addEventListener('click', async () => {
+            if (!excelData || pdfFilesList.length === 0) return;
+
+            startProcessBtn.setAttribute('disabled', 'true');
+            exportExcelBtn.setAttribute('disabled', 'true');
+            processedResults = [];
+
+            const totalRows = excelRawRows.length;
+            let currentProgress = 0;
+
+            // Pre-load all PDF texts parsed by page
+            // Structure: { fileObj, filename, volume, pages: [{ pageNum, text }] }
+            updateProgress(5, 'กำลังอ่านและแยกข้อความจากไฟล์ PDF ทั้งหมด...');
+            
+            const parsedPdfs = [];
+            for (let i = 0; i < pdfFilesList.length; i++) {
+                const pdfFile = pdfFilesList[i];
+                const volume = extractVolumeFromFilename(pdfFile.name);
+                const arrayBuffer = await pdfFile.arrayBuffer();
+                const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+                const pdfDoc = await loadingTask.promise;
+                
+                const pages = [];
+                for (let p = 1; p <= pdfDoc.numPages; p++) {
+                    const page = await pdfDoc.getPage(p);
+                    const textContent = await page.getTextContent();
+                    const pageText = textContent.items.map(item => item.str).join(' ');
+                    pages.push({ pageNum: p, text: pageText });
+                }
+                parsedPdfs.push({ filename: pdfFile.name, volume: volume, pages: pages });
+            }
+
+            updateProgress(20, 'กำลังเริ่มกระบวนการตรวจสอบเงื่อนไข Dual Engine...');
+
+            // Process each row in Excel
+            for (let i = 0; i < totalRows; i++) {
+                const row = excelRawRows[i];
+                // Excel columns (0-indexed): A=0, C=2, G=6, J=9, O=14
+                const colA_Chanote = String(row[0] || '').trim();
+                const colC_Tambon = String(row[2] || '').trim();
+                const colG_Utm = String(row[6] || '').trim();
+                const colJ_LandNo = String(row[9] || '').trim();
+                const colO_Volume = String(row[14] || '').trim();
+
+                let matchResult = {
+                    found: false,
+                    searchType: '',
+                    matchedPdf: '-',
+                    matchedPage: '-',
+                    noticeText: '-'
+                };
+
+                // Determine Search Type
+                let searchType = '';
+                if (colA_Chanote !== '') {
+                    searchType = 'แบบโฉนดที่ดิน (Col A + C)';
+                } else if (colG_Utm !== '' || colJ_LandNo !== '') {
+                    searchType = 'แบบเรียงเลขที่ดิน (Col G + J)';
+                } else {
+                    searchType = 'ไม่มีเงื่อนไขค้นหา';
+                }
+
+                if (searchType !== 'ไม่มีเงื่อนไขค้นหา') {
+                    // Filter PDFs matching Column O (เล่ม) if Col O is provided
+                    let targetPdfs = parsedPdfs;
+                    if (colO_Volume !== '') {
+                        targetPdfs = parsedPdfs.filter(p => p.volume === colO_Volume);
+                    }
+
+                    // Scan across filtered PDFs
+                    for (const pdf of targetPdfs) {
+                        let foundInPdf = false;
+                        for (const page of pdf.pages) {
+                            let isMatched = false;
+                            let detectedNotice = '';
+
+                            if (colA_Chanote !== '') {
+                                // Match Type 1: Chanote & Tambon
+                                const cleanChanote = colA_Chanote.replace(/\s+/g, '');
+                                const cleanPageText = page.text.replace(/\s+/g, '');
+                                const hasChanote = cleanPageText.includes(cleanChanote) || page.text.includes(colA_Chanote);
+                                
+                                // Optional Tambon check if provided
+                                const hasTambon = colC_Tambon === '' || page.text.includes(colC_Tambon);
+
+                                if (hasChanote && hasTambon) {
+                                    isMatched = true;
+                                }
+                            } else {
+                                // Match Type 2: UTM (ระวาง) & LandNo (เลขที่ดิน)
+                                const cleanUtm = colG_Utm.replace(/\s+/g, '');
+                                const cleanLandNo = colJ_LandNo.replace(/\s+/g, '');
+                                
+                                const pageClean = page.text.replace(/\s+/g, '');
+                                const hasUtm = cleanUtm === '' || pageClean.includes(cleanUtm);
+                                const hasLandNo = cleanLandNo === '' || pageClean.includes(cleanLandNo);
+
+                                if (hasUtm && hasLandNo && (cleanUtm !== '' || cleanLandNo !== '')) {
+                                    isMatched = true;
+                                }
+                            }
+
+                            if (isMatched) {
+                                // Extract notice text if available ("ยกเลิก ตามประกาศ...")
+                                const noticeIdx = page.text.indexOf('ยกเลิก');
+                                if (noticeIdx !== -1) {
+                                    detectedNotice = page.text.substring(noticeIdx, Math.min(noticeIdx + 120, page.text.length));
+                                } else {
+                                    detectedNotice = 'พบข้อมูลตรงกันในหน้าเอกสาร';
+                                }
+
+                                matchResult = {
+                                    found: true,
+                                    searchType: searchType,
+                                    matchedPdf: pdf.filename,
+                                    matchedPage: page.pageNum,
+                                    noticeText: detectedNotice
+                                };
+                                foundInPdf = true;
+                                break;
+                            }
+                        }
+                        if (foundInPdf) break;
+                    }
+                }
+
+                processedResults.push({
+                    rowIndex: i + 1,
+                    colA: colA_Chanote,
+                    colC: colC_Tambon,
+                    colG: colG_Utm,
+                    colJ: colJ_LandNo,
+                    colO: colO_Volume,
+                    searchType: searchType,
+                    ...matchResult
+                });
+
+                // Update progress
+                const progress = Math.round(20 + ((i + 1) / totalRows) * 80);
+                updateProgress(progress, `กำลังตรวจสอบแถวที่ ${i + 1} จาก ${totalRows}...`);
+            }
+
+            updateProgress(100, 'ตรวจสอบข้อมูลเสร็จสิ้นเรียบร้อยแล้ว!');
+            renderResults();
+            startProcessBtn.removeAttribute('disabled');
+            exportExcelBtn.removeAttribute('disabled');
+        });
+
+        function updateProgress(percent, text) {
+            progressBar.style.width = `${percent}%`;
+            progressPercentText.textContent = `${percent}%`;
+            progressStatusText.textContent = text;
+        }
+
+        // --- RENDER RESULTS TABLE ---
+        function renderResults() {
+            const searchTerm = searchInput.value.toLowerCase();
+            const statusFilter = filterStatus.value;
+
+            const filtered = processedResults.filter(item => {
+                const matchSearch = 
+                    item.colA.toLowerCase().includes(searchTerm) ||
+                    item.colC.toLowerCase().includes(searchTerm) ||
+                    item.colG.toLowerCase().includes(searchTerm) ||
+                    item.colJ.toLowerCase().includes(searchTerm) ||
+                    item.matchedPdf.toLowerCase().includes(searchTerm);
+                
+                if (!matchSearch) return false;
+
+                if (statusFilter === 'found' && !item.found) return false;
+                if (statusFilter === 'not_found' && item.found) return false;
+
+                return true;
+            });
+
+            resultCountBadge.textContent = `${filtered.length} รายการ`;
+
+            if (filtered.length === 0) {
+                resultTableBody.innerHTML = `
+                    <tr>
+                        <td colspan="10" class="text-center py-12 text-slate-400">
+                            ไม่พบข้อมูลที่ตรงกับเงื่อนไขการค้นหา
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            resultTableBody.innerHTML = '';
+            filtered.forEach((item, idx) => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-50/80 transition";
+                tr.innerHTML = `
+                    <td class="p-3 border-b text-slate-500">${item.rowIndex}</td>
+                    <td class="p-3 border-b font-medium text-slate-900">${item.colA || '-'}</td>
+                    <td class="p-3 border-b text-slate-600">${item.colC || '-'}</td>
+                    <td class="p-3 border-b text-slate-600">${item.colG || '-'}</td>
+                    <td class="p-3 border-b text-slate-600">${item.colJ || '-'}</td>
+                    <td class="p-3 border-b text-slate-600">${item.colO || '-'}</td>
+                    <td class="p-3 border-b text-slate-500">${item.searchType}</td>
+                    <td class="p-3 border-b">
+                        ${item.found 
+                            ? '<span class="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-md font-medium text-[11px]">พบ</span>' 
+                            : '<span class="px-2 py-1 bg-slate-100 text-slate-500 rounded-md font-medium text-[11px]">ไม่พบ</span>'
+                        }
+                    </td>
+                    <td class="p-3 border-b text-slate-600">${item.matchedPdf !== '-' ? `${item.matchedPdf} (หน้า ${item.matchedPage})` : '-'}</td>
+                    <td class="p-3 border-b text-slate-700 max-w-xs truncate" title="${item.noticeText}">${item.noticeText}</td>
+                `;
+                resultTableBody.appendChild(tr);
+            });
+        }
+
+        searchInput.addEventListener('input', renderResults);
+        filterStatus.addEventListener('change', renderResults);
+
+        // --- EXPORT TO EXCEL ---
+        exportExcelBtn.addEventListener('click', () => {
+            if (processedResults.length === 0) return;
+
+            // Prepare export data based on original excel + appended result columns
+            const newHeader = [
+                ...excelHeader, 
+                'สถานะการค้นหา', 
+                'รูปแบบการค้นหา', 
+                'ไฟล์ PDF ที่พบ', 
+                'หน้าที่พบ', 
+                'รายละเอียดประกาศ'
+            ];
+
+            const newRows = excelRawRows.map((row, idx) => {
+                const res = processedResults[idx];
+                return [
+                    ...row,
+                    res.found ? 'พบ' : 'ไม่พบ',
+                    res.searchType,
+                    res.matchedPdf,
+                    res.matchedPage,
+                    res.noticeText
+                ];
+            });
+
+            const wsData = [newHeader, ...newRows];
+            const ws = XLSX.utils.aoa_to_sheet(wsData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "ผลการตรวจสอบประกาศ");
+            XLSX.writeFile(wb, "Land_Cancellation_Inspection_Result.xlsx");
+        });
+    </script>
+</body>
+</html>
