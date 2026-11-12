@@ -32,7 +32,7 @@
                 </div>
                 <div>
                     <h1 class="text-xl font-bold tracking-wide">ระบบตรวจสอบประกาศยกเลิกที่ดิน</h1>
-                    <p class="text-xs text-indigo-200">รองรับแบบโฉนดที่ดิน, แบบเรียงเลขที่ดิน และเงื่อนไขเล่มจากชื่อไฟล์ PDF</p>
+                    <p class="text-xs text-indigo-200">รองรับหลายไฟล์ Excel และ PDF พร้อมกัน, แบบโฉนดที่ดิน, แบบเรียงเลขที่ดิน และเงื่อนไขเล่ม</p>
                 </div>
             </div>
             <div class="flex items-center space-x-2 text-xs bg-indigo-800/60 px-3 py-1.5 rounded-lg border border-indigo-600">
@@ -48,35 +48,32 @@
         <!-- Step 1: File Upload Section -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             
-            <!-- Excel Upload Box -->
+            <!-- Excel Upload Box (Multiple) -->
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
                 <div>
                     <div class="flex items-center justify-between mb-4">
                         <h2 class="font-semibold text-slate-900 flex items-center space-x-2">
                             <i data-lucide="file-spreadsheet" class="w-5 h-5 text-emerald-600"></i>
-                            <span>1. ไฟล์ Excel (ข้อมูลโฉนด / เลขที่ดิน)</span>
+                            <span>1. ไฟล์ Excel (เลือกได้ 1 หรือหลายไฟล์)</span>
                         </h2>
-                        <span id="excelStatusBadge" class="text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-500 font-medium">ยังไม่ได้เลือกไฟล์</span>
+                        <span id="excelStatusBadge" class="text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-500 font-medium">0 ไฟล์ (0 แถว)</span>
                     </div>
 
                     <div id="excelDropZone" class="border-2 border-dashed border-slate-300 hover:border-emerald-500 rounded-xl p-6 text-center cursor-pointer transition bg-slate-50/50 hover:bg-emerald-50/30 relative">
-                        <input type="file" id="excelFile" accept=".xlsx, .xls" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10">
+                        <input type="file" id="excelFile" accept=".xlsx, .xls" multiple class="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10">
                         <div class="flex flex-col items-center pointer-events-none space-y-2">
                             <div class="p-3 bg-emerald-100 text-emerald-600 rounded-full">
                                 <i data-lucide="upload-cloud" class="w-6 h-6"></i>
                             </div>
-                            <p class="text-sm font-medium text-slate-700">ลากไฟล์ Excel มาวางที่นี่ หรือ <span class="text-emerald-600 underline">คลิกเพื่อเลือกไฟล์</span></p>
-                            <p class="text-xs text-slate-400">รองรับนามสกุล .xlsx, .xls</p>
+                            <p class="text-sm font-medium text-slate-700">ลากไฟล์ Excel มาวาง (หลายไฟล์ได้) หรือ <span class="text-emerald-600 underline">คลิกเพื่อเลือกไฟล์</span></p>
+                            <p class="text-xs text-slate-400">รองรับนามสกุล .xlsx, .xls (ระบบจะรวมข้อมูลให้อัตโนมัติ)</p>
                         </div>
                     </div>
                 </div>
 
-                <div id="excelFileInfo" class="mt-4 hidden p-3 bg-emerald-50 rounded-xl border border-emerald-100 flex items-center justify-between">
-                    <div class="flex items-center space-x-3 overflow-hidden">
-                        <i data-lucide="file-check-2" class="w-5 h-5 text-emerald-600 flex-shrink-0"></i>
-                        <span id="excelFileName" class="text-xs font-medium text-emerald-900 truncate"></span>
-                    </div>
-                    <button type="button" id="removeExcelBtn" class="text-xs text-rose-500 hover:text-rose-700 font-medium px-2 py-1 z-20 relative">ลบ</button>
+                <!-- Excel File List -->
+                <div id="excelFileListContainer" class="mt-4 max-h-28 overflow-y-auto space-y-1.5 hidden pr-1">
+                    <!-- Rendered via JS -->
                 </div>
             </div>
 
@@ -150,7 +147,7 @@
                 <div class="flex items-center space-x-2 w-full md:w-auto">
                     <div class="relative flex-grow md:w-64">
                         <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
-                        <input type="text" id="searchInput" placeholder="ค้นหาโฉนด, ตำบล, ระวาง..." class="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-indigo-500">
+                        <input type="text" id="searchInput" placeholder="ค้นหาโฉนด, ตำบล, ระวาง, ชื่อไฟล์..." class="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-indigo-500">
                     </div>
                     <select id="filterStatus" class="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-indigo-500">
                         <option value="all">สถานะทั้งหมด</option>
@@ -166,6 +163,7 @@
                     <thead class="bg-slate-100 text-slate-600 sticky top-0 z-10 font-semibold">
                         <tr>
                             <th class="p-3 border-b">ลำดับ</th>
+                            <th class="p-3 border-b">ไฟล์ Excel ต้นฉบับ</th>
                             <th class="p-3 border-b">โฉนด (A)</th>
                             <th class="p-3 border-b">ตำบล (C)</th>
                             <th class="p-3 border-b">ระวาง UTM (G)</th>
@@ -179,7 +177,7 @@
                     </thead>
                     <tbody id="resultTableBody" class="divide-y divide-slate-100">
                         <tr>
-                            <td colspan="10" class="text-center py-12 text-slate-400">
+                            <td colspan="11" class="text-center py-12 text-slate-400">
                                 <div class="flex flex-col items-center justify-center space-y-2">
                                     <i data-lucide="folder-open" class="w-10 h-10 text-slate-300"></i>
                                     <p>ยังไม่มีข้อมูล กรุณาอัปโหลดไฟล์ Excel และ PDF แล้วกดเริ่มตรวจสอบ</p>
@@ -203,17 +201,14 @@
         // Initialize Lucide Icons
         lucide.createIcons();
 
-        let excelData = null;
-        let excelRawRows = [];
-        let excelHeader = [];
+        // Store multiple Excel files: [{ name, header, rows }]
+        let excelFilesList = [];
         let pdfFilesList = [];
         let processedResults = [];
 
         // DOM Elements
-        const excelFileinput = document.getElementById('excelFile');
-        const excelFileInfo = document.getElementById('excelFileInfo');
-        const excelFileName = document.getElementById('excelFileName');
-        const removeExcelBtn = document.getElementById('removeExcelBtn');
+        const excelFileInput = document.getElementById('excelFile');
+        const excelFileListContainer = document.getElementById('excelFileListContainer');
         const excelStatusBadge = document.getElementById('excelStatusBadge');
 
         const pdfFilesInput = document.getElementById('pdfFiles');
@@ -231,52 +226,85 @@
         const searchInput = document.getElementById('searchInput');
         const filterStatus = document.getElementById('filterStatus');
 
-        // --- EXCEL UPLOAD HANDLING ---
-        excelFileinput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
+        // --- EXCEL UPLOAD HANDLING (Multiple or Single) ---
+        excelFileInput.addEventListener('change', async (e) => {
+            const files = Array.from(e.target.files);
+            if (files.length === 0) return;
 
-            const reader = new FileReader();
-            reader.onload = function(evt) {
+            for (const file of files) {
+                // Skip if duplicate file name already loaded
+                if (excelFilesList.some(f => f.name === file.name)) {
+                    continue;
+                }
+
                 try {
-                    const data = new Uint8Array(evt.target.result);
+                    const arrayBuffer = await file.arrayBuffer();
+                    const data = new Uint8Array(arrayBuffer);
                     const workbook = XLSX.read(data, { type: 'array' });
                     const firstSheetName = workbook.SheetNames[0];
                     const worksheet = workbook.Sheets[firstSheetName];
                     const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
-                    if (json.length === 0) {
-                        alert('ไฟล์ Excel ไม่มีข้อมูล');
-                        return;
+                    if (json.length <= 1) {
+                        alert(`ไฟล์ "${file.name}" ไม่มีข้อมูลแถวรายการ`);
+                        continue;
                     }
 
-                    excelHeader = json[0];
-                    excelRawRows = json.slice(1).filter(row => row.length > 0);
-                    excelData = json;
+                    const header = json[0];
+                    const rows = json.slice(1).filter(row => row.some(cell => cell !== undefined && cell !== null && String(cell).trim() !== ''));
 
-                    excelFileName.textContent = file.name;
-                    excelFileInfo.classList.remove('hidden');
-                    excelStatusBadge.textContent = `โหลดแล้ว (${excelRawRows.length} แถว)`;
-                    excelStatusBadge.className = "text-xs px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 font-medium";
-                    checkReadyState();
+                    excelFilesList.push({
+                        name: file.name,
+                        header: header,
+                        rows: rows
+                    });
                 } catch (err) {
                     console.error(err);
-                    alert('เกิดข้อผิดพลาดในการอ่านไฟล์ Excel');
+                    alert(`เกิดข้อผิดพลาดในการอ่านไฟล์ Excel: ${file.name}`);
                 }
-            };
-            reader.readAsArrayBuffer(file);
+            }
+
+            renderExcelList();
+            checkReadyState();
+            excelFileInput.value = '';
         });
 
-        removeExcelBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            excelFileinput.value = '';
-            excelData = null;
-            excelRawRows = [];
-            excelFileInfo.classList.add('hidden');
-            excelStatusBadge.textContent = 'ยังไม่ได้เลือกไฟล์';
-            excelStatusBadge.className = "text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-500 font-medium";
+        function renderExcelList() {
+            const totalRows = excelFilesList.reduce((sum, f) => sum + f.rows.length, 0);
+
+            if (excelFilesList.length === 0) {
+                excelFileListContainer.classList.add('hidden');
+                excelStatusBadge.textContent = '0 ไฟล์ (0 แถว)';
+                excelStatusBadge.className = "text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-500 font-medium";
+                return;
+            }
+
+            excelFileListContainer.classList.remove('hidden');
+            excelStatusBadge.textContent = `${excelFilesList.length} ไฟล์ (${totalRows.toLocaleString()} แถว)`;
+            excelStatusBadge.className = "text-xs px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 font-medium";
+
+            excelFileListContainer.innerHTML = '';
+            excelFilesList.forEach((fileObj, index) => {
+                const div = document.createElement('div');
+                div.className = "flex items-center justify-between p-2 bg-emerald-50/70 rounded-lg border border-emerald-100 text-xs";
+                div.innerHTML = `
+                    <div class="flex items-center space-x-2 truncate">
+                        <i data-lucide="file-check-2" class="w-4 h-4 text-emerald-600 flex-shrink-0"></i>
+                        <span class="font-medium text-emerald-950 truncate">${fileObj.name}</span>
+                        <span class="text-[10px] bg-emerald-200 text-emerald-800 px-1.5 py-0.5 rounded flex-shrink-0">${fileObj.rows.length.toLocaleString()} แถว</span>
+                    </div>
+                    <button type="button" onclick="removeExcel(${index})" class="text-rose-500 hover:text-rose-700 font-medium px-1.5 py-0.5">ลบ</button>
+                `;
+                excelFileListContainer.appendChild(div);
+            });
+            lucide.createIcons();
+        }
+
+        window.removeExcel = function(index) {
+            excelFilesList.splice(index, 1);
+            renderExcelList();
             checkReadyState();
-        });
+        }
 
         // --- PDF UPLOAD HANDLING (Multiple) ---
         pdfFilesInput.addEventListener('change', (e) => {
@@ -284,7 +312,6 @@
             if (files.length === 0) return;
 
             files.forEach(file => {
-                // Avoid duplicates by name
                 if (!pdfFilesList.some(f => f.name === file.name)) {
                     pdfFilesList.push(file);
                 }
@@ -332,7 +359,8 @@
         }
 
         function checkReadyState() {
-            if (excelData && pdfFilesList.length > 0) {
+            const hasExcelRows = excelFilesList.some(f => f.rows.length > 0);
+            if (hasExcelRows && pdfFilesList.length > 0) {
                 startProcessBtn.removeAttribute('disabled');
             } else {
                 startProcessBtn.setAttribute('disabled', 'true');
@@ -349,17 +377,27 @@
 
         // --- PROCESSING ENGINE ---
         startProcessBtn.addEventListener('click', async () => {
-            if (!excelData || pdfFilesList.length === 0) return;
+            if (excelFilesList.length === 0 || pdfFilesList.length === 0) return;
 
             startProcessBtn.setAttribute('disabled', 'true');
             exportExcelBtn.setAttribute('disabled', 'true');
             processedResults = [];
 
-            const totalRows = excelRawRows.length;
-            let currentProgress = 0;
+            // Flatten all Excel rows with source file info
+            const combinedEntries = [];
+            excelFilesList.forEach(fileObj => {
+                fileObj.rows.forEach((row, rIdx) => {
+                    combinedEntries.push({
+                        sourceExcel: fileObj.name,
+                        originalRow: row,
+                        rowNumberInFile: rIdx + 2 // +2 because 1-indexed + header row
+                    });
+                });
+            });
+
+            const totalRows = combinedEntries.length;
 
             // Pre-load all PDF texts parsed by page
-            // Structure: { fileObj, filename, volume, pages: [{ pageNum, text }] }
             updateProgress(5, 'กำลังอ่านและแยกข้อความจากไฟล์ PDF ทั้งหมด...');
             
             const parsedPdfs = [];
@@ -378,13 +416,18 @@
                     pages.push({ pageNum: p, text: pageText });
                 }
                 parsedPdfs.push({ filename: pdfFile.name, volume: volume, pages: pages });
+                
+                const pdfProg = Math.round(5 + ((i + 1) / pdfFilesList.length) * 15);
+                updateProgress(pdfProg, `อ่านไฟล์ PDF (${i + 1}/${pdfFilesList.length}): ${pdfFile.name}`);
             }
 
             updateProgress(20, 'กำลังเริ่มกระบวนการตรวจสอบเงื่อนไข Dual Engine...');
 
-            // Process each row in Excel
+            // Process each combined row
             for (let i = 0; i < totalRows; i++) {
-                const row = excelRawRows[i];
+                const entry = combinedEntries[i];
+                const row = entry.originalRow;
+                
                 // Excel columns (0-indexed): A=0, C=2, G=6, J=9, O=14
                 const colA_Chanote = String(row[0] || '').trim();
                 const colC_Tambon = String(row[2] || '').trim();
@@ -429,8 +472,6 @@
                                 const cleanChanote = colA_Chanote.replace(/\s+/g, '');
                                 const cleanPageText = page.text.replace(/\s+/g, '');
                                 const hasChanote = cleanPageText.includes(cleanChanote) || page.text.includes(colA_Chanote);
-                                
-                                // Optional Tambon check if provided
                                 const hasTambon = colC_Tambon === '' || page.text.includes(colC_Tambon);
 
                                 if (hasChanote && hasTambon) {
@@ -440,7 +481,6 @@
                                 // Match Type 2: UTM (ระวาง) & LandNo (เลขที่ดิน)
                                 const cleanUtm = colG_Utm.replace(/\s+/g, '');
                                 const cleanLandNo = colJ_LandNo.replace(/\s+/g, '');
-                                
                                 const pageClean = page.text.replace(/\s+/g, '');
                                 const hasUtm = cleanUtm === '' || pageClean.includes(cleanUtm);
                                 const hasLandNo = cleanLandNo === '' || pageClean.includes(cleanLandNo);
@@ -451,7 +491,6 @@
                             }
 
                             if (isMatched) {
-                                // Extract notice text if available ("ยกเลิก ตามประกาศ...")
                                 const noticeIdx = page.text.indexOf('ยกเลิก');
                                 if (noticeIdx !== -1) {
                                     detectedNotice = page.text.substring(noticeIdx, Math.min(noticeIdx + 120, page.text.length));
@@ -476,6 +515,8 @@
 
                 processedResults.push({
                     rowIndex: i + 1,
+                    sourceExcel: entry.sourceExcel,
+                    originalRow: entry.originalRow,
                     colA: colA_Chanote,
                     colC: colC_Tambon,
                     colG: colG_Utm,
@@ -485,12 +526,15 @@
                     ...matchResult
                 });
 
-                // Update progress
-                const progress = Math.round(20 + ((i + 1) / totalRows) * 80);
-                updateProgress(progress, `กำลังตรวจสอบแถวที่ ${i + 1} จาก ${totalRows}...`);
+                // Yield to UI every 50 rows so browser stays responsive on large multi-file batches
+                if (i % 50 === 0 || i === totalRows - 1) {
+                    const progress = Math.round(20 + ((i + 1) / totalRows) * 80);
+                    updateProgress(progress, `กำลังตรวจสอบรายการที่ ${i + 1} จาก ${totalRows}...`);
+                    await new Promise(resolve => setTimeout(resolve, 0));
+                }
             }
 
-            updateProgress(100, 'ตรวจสอบข้อมูลเสร็จสิ้นเรียบร้อยแล้ว!');
+            updateProgress(100, `ตรวจสอบข้อมูลเสร็จสิ้นทั้งหมด ${totalRows.toLocaleString()} รายการ!`);
             renderResults();
             startProcessBtn.removeAttribute('disabled');
             exportExcelBtn.removeAttribute('disabled');
@@ -509,6 +553,7 @@
 
             const filtered = processedResults.filter(item => {
                 const matchSearch = 
+                    item.sourceExcel.toLowerCase().includes(searchTerm) ||
                     item.colA.toLowerCase().includes(searchTerm) ||
                     item.colC.toLowerCase().includes(searchTerm) ||
                     item.colG.toLowerCase().includes(searchTerm) ||
@@ -523,12 +568,12 @@
                 return true;
             });
 
-            resultCountBadge.textContent = `${filtered.length} รายการ`;
+            resultCountBadge.textContent = `${filtered.length.toLocaleString()} รายการ`;
 
             if (filtered.length === 0) {
                 resultTableBody.innerHTML = `
                     <tr>
-                        <td colspan="10" class="text-center py-12 text-slate-400">
+                        <td colspan="11" class="text-center py-12 text-slate-400">
                             ไม่พบข้อมูลที่ตรงกับเงื่อนไขการค้นหา
                         </td>
                     </tr>
@@ -537,11 +582,15 @@
             }
 
             resultTableBody.innerHTML = '';
-            filtered.forEach((item, idx) => {
+            // Render up to 1,000 rows in preview table for smooth DOM performance (full data exports to Excel)
+            const displayLimit = filtered.slice(0, 1000);
+            
+            displayLimit.forEach((item) => {
                 const tr = document.createElement('tr');
                 tr.className = "hover:bg-slate-50/80 transition";
                 tr.innerHTML = `
                     <td class="p-3 border-b text-slate-500">${item.rowIndex}</td>
+                    <td class="p-3 border-b text-emerald-700 font-medium max-w-[160px] truncate" title="${item.sourceExcel}">${item.sourceExcel}</td>
                     <td class="p-3 border-b font-medium text-slate-900">${item.colA || '-'}</td>
                     <td class="p-3 border-b text-slate-600">${item.colC || '-'}</td>
                     <td class="p-3 border-b text-slate-600">${item.colG || '-'}</td>
@@ -559,6 +608,16 @@
                 `;
                 resultTableBody.appendChild(tr);
             });
+
+            if (filtered.length > 1000) {
+                const noticeTr = document.createElement('tr');
+                noticeTr.innerHTML = `
+                    <td colspan="11" class="text-center py-3 bg-amber-50 text-amber-800 font-medium">
+                        แสดงตัวอย่าง 1,000 รายการแรกจากทั้งหมด ${filtered.length.toLocaleString()} รายการ (กดปุ่ม "ส่งออก Excel ผลลัพธ์" เพื่อดูข้อมูลครบทั้งหมด)
+                    </td>
+                `;
+                resultTableBody.appendChild(noticeTr);
+            }
         }
 
         searchInput.addEventListener('input', renderResults);
@@ -568,9 +627,19 @@
         exportExcelBtn.addEventListener('click', () => {
             if (processedResults.length === 0) return;
 
-            // Prepare export data based on original excel + appended result columns
+            // Use the header from the first uploaded Excel file as base
+            const baseHeader = excelFilesList[0]?.header || [];
+            const maxCols = Math.max(
+                baseHeader.length,
+                ...processedResults.map(r => r.originalRow.length)
+            );
+
+            // Pad baseHeader if any subsequent file had more columns
+            const normalizedHeader = Array.from({ length: maxCols }, (_, idx) => baseHeader[idx] || `คอลัมน์ ${idx + 1}`);
+
             const newHeader = [
-                ...excelHeader, 
+                'ไฟล์ Excel ต้นฉบับ',
+                ...normalizedHeader, 
                 'สถานะการค้นหา', 
                 'รูปแบบการค้นหา', 
                 'ไฟล์ PDF ที่พบ', 
@@ -578,10 +647,11 @@
                 'รายละเอียดประกาศ'
             ];
 
-            const newRows = excelRawRows.map((row, idx) => {
-                const res = processedResults[idx];
+            const newRows = processedResults.map((res) => {
+                const paddedRow = Array.from({ length: maxCols }, (_, idx) => res.originalRow[idx] ?? '');
                 return [
-                    ...row,
+                    res.sourceExcel,
+                    ...paddedRow,
                     res.found ? 'พบ' : 'ไม่พบ',
                     res.searchType,
                     res.matchedPdf,
