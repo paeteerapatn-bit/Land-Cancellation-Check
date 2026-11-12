@@ -232,7 +232,6 @@
             if (files.length === 0) return;
 
             for (const file of files) {
-                // Skip if duplicate file name already loaded
                 if (excelFilesList.some(f => f.name === file.name)) {
                     continue;
                 }
@@ -367,7 +366,6 @@
             }
         }
 
-        // Extract Volume Number from PDF filename (e.g. "...-67" -> "67")
         function extractVolumeFromFilename(filename) {
             const match = filename.match(/-(\d+)(?:\.pdf)?$/i);
             if (match) return match[1];
@@ -375,7 +373,67 @@
             return digits ? digits[digits.length - 1] : '';
         }
 
-        // --- PROCESSING ENGINE ---
+        // Helper function for strict exact token / word boundary matching for numbers
+        function hasExactNumberMatch(pageText, cleanPageText, searchStr) {
+            if (!searchStr) return false;
+            const cleanSearch = String(searchStr).replace(/\s+/g, '');
+            if (pageText.includes(searchStr) || cleanPageText.includes(cleanSearch)) {
+                if (/^\d+$/.test(cleanSearch)) {
+                    const regex = new RegExp(`(?:^|[^\\d])${cleanSearch}(?:[^\\d]|$)`);
+                    return regex.test(cleanPageText) || regex.test(pageText);
+                }
+                return true;
+            }
+            return false;
+        }
+
+        // Helper function: ดึงรายละเอียดประกาศยกเลิกเฉพาะจุดที่อยู่ติดกับแปลงที่ค้นพบ
+        function extractContextNotice(pageText, targetNumberStr) {
+            let anchorIdx = -1;
+            const cleanNum = String(targetNumberStr || '').replace(/\s+/g, '');
+
+            if (cleanNum) {
+                // หาตำแหน่งของเลขโฉนดหรือเลขที่ดินแบบตรงขอบเขตตัวเลขในหน้าเอกสาร
+                if (/^\d+$/.test(cleanNum)) {
+                    const regex = new RegExp(`(?:^|[^\\d])(${cleanNum})(?:[^\\d]|$)`);
+                    const match = regex.exec(pageText);
+                    if (match) {
+                        anchorIdx = match.index + match[0].indexOf(match[1]);
+                    }
+                }
+                if (anchorIdx === -1) {
+                    anchorIdx = pageText.indexOf(targetNumberStr);
+                }
+            }
+
+            if (anchorIdx !== -1) {
+                // 1. ค้นหาคำว่า "ยกเลิก" ที่อยู่ถัดจากเลขแปลงของเรา (ในระยะ 350 ตัวอักษรถัดไป ซึ่งเป็นบรรทัดเดียวกัน)
+                const afterText = pageText.substring(anchorIdx, Math.min(anchorIdx + 350, pageText.length));
+                const nextCancelIdx = afterText.indexOf('ยกเลิก');
+                if (nextCancelIdx !== -1) {
+                    return afterText.substring(nextCancelIdx, Math.min(nextCancelIdx + 130, afterText.length)).trim();
+                }
+
+                // 2. เผื่อกรณีรูปแบบเอกสารวางคำว่า "ยกเลิก" ไว้ก่อนหน้าเลขแปลงเล็กน้อย (ในระยะ 150 ตัวอักษรก่อนหน้า)
+                const startBefore = Math.max(0, anchorIdx - 150);
+                const beforeText = pageText.substring(startBefore, anchorIdx);
+                const prevCancelIdx = beforeText.lastIndexOf('ยกเลิก');
+                if (prevCancelIdx !== -1) {
+                    const globalCancelIdx = startBefore + prevCancelIdx;
+                    return pageText.substring(globalCancelIdx, Math.min(globalCancelIdx + 130, pageText.length)).trim();
+                }
+            }
+
+            // 3. Fallback หากไม่พบคำว่า "ยกเลิก" ในระยะใกล้เคียง
+            const fallbackIdx = pageText.indexOf('ยกเลิก');
+            if (fallbackIdx !== -1) {
+                return pageText.substring(fallbackIdx, Math.min(fallbackIdx + 130, pageText.length)).trim();
+            }
+
+            return 'พบข้อมูลตรงกันในหน้าเอกสาร';
+        }
+
+        // --- PROCESSING ENGINE (Strict Boundary & Scoring Engine) ---
         startProcessBtn.addEventListener('click', async () => {
             if (excelFilesList.length === 0 || pdfFilesList.length === 0) return;
 
@@ -383,21 +441,19 @@
             exportExcelBtn.setAttribute('disabled', 'true');
             processedResults = [];
 
-            // Flatten all Excel rows with source file info
             const combinedEntries = [];
             excelFilesList.forEach(fileObj => {
                 fileObj.rows.forEach((row, rIdx) => {
                     combinedEntries.push({
                         sourceExcel: fileObj.name,
                         originalRow: row,
-                        rowNumberInFile: rIdx + 2 // +2 because 1-indexed + header row
+                        rowNumberInFile: rIdx + 2
                     });
                 });
             });
 
             const totalRows = combinedEntries.length;
 
-            // Pre-load all PDF texts parsed by page
             updateProgress(5, 'กำลังอ่านและแยกข้อความจากไฟล์ PDF ทั้งหมด...');
             
             const parsedPdfs = [];
@@ -412,8 +468,12 @@
                 for (let p = 1; p <= pdfDoc.numPages; p++) {
                     const page = await pdfDoc.getPage(p);
                     const textContent = await page.getTextContent();
-                    const pageText = textContent.items.map(item => item.str).join(' ');
-                    pages.push({ pageNum: p, text: pageText });
+                    const rawPageText = textContent.items.map(item => item.str).join(' ');
+                    pages.push({ 
+                        pageNum: p, 
+                        text: rawPageText,
+                        cleanText: rawPageText.replace(/\s+/g, '') 
+                    });
                 }
                 parsedPdfs.push({ filename: pdfFile.name, volume: volume, pages: pages });
                 
@@ -423,12 +483,10 @@
 
             updateProgress(20, 'กำลังเริ่มกระบวนการตรวจสอบเงื่อนไข Dual Engine...');
 
-            // Process each combined row
             for (let i = 0; i < totalRows; i++) {
                 const entry = combinedEntries[i];
                 const row = entry.originalRow;
                 
-                // Excel columns (0-indexed): A=0, C=2, G=6, J=9, O=14
                 const colA_Chanote = String(row[0] || '').trim();
                 const colC_Tambon = String(row[2] || '').trim();
                 const colG_Utm = String(row[6] || '').trim();
@@ -443,7 +501,6 @@
                     noticeText: '-'
                 };
 
-                // Determine Search Type
                 let searchType = '';
                 if (colA_Chanote !== '') {
                     searchType = 'แบบโฉนดที่ดิน (Col A + C)';
@@ -454,62 +511,70 @@
                 }
 
                 if (searchType !== 'ไม่มีเงื่อนไขค้นหา') {
-                    // Filter PDFs matching Column O (เล่ม) if Col O is provided
                     let targetPdfs = parsedPdfs;
                     if (colO_Volume !== '') {
                         targetPdfs = parsedPdfs.filter(p => p.volume === colO_Volume);
                     }
 
-                    // Scan across filtered PDFs
+                    let bestMatch = null;
+                    let highestScore = -1;
+
                     for (const pdf of targetPdfs) {
-                        let foundInPdf = false;
                         for (const page of pdf.pages) {
+                            let score = 0;
                             let isMatched = false;
-                            let detectedNotice = '';
 
                             if (colA_Chanote !== '') {
-                                // Match Type 1: Chanote & Tambon
-                                const cleanChanote = colA_Chanote.replace(/\s+/g, '');
-                                const cleanPageText = page.text.replace(/\s+/g, '');
-                                const hasChanote = cleanPageText.includes(cleanChanote) || page.text.includes(colA_Chanote);
-                                const hasTambon = colC_Tambon === '' || page.text.includes(colC_Tambon);
-
-                                if (hasChanote && hasTambon) {
+                                const hasChanote = hasExactNumberMatch(page.text, page.cleanText, colA_Chanote);
+                                
+                                if (hasChanote) {
+                                    score += 20;
+                                    if (colC_Tambon !== '') {
+                                        const cleanTambon = colC_Tambon.replace(/\s+/g, '');
+                                        if (page.cleanText.includes(cleanTambon) || page.text.includes(colC_Tambon)) {
+                                            score += 15;
+                                        }
+                                    }
                                     isMatched = true;
                                 }
                             } else {
-                                // Match Type 2: UTM (ระวาง) & LandNo (เลขที่ดิน)
-                                const cleanUtm = colG_Utm.replace(/\s+/g, '');
-                                const cleanLandNo = colJ_LandNo.replace(/\s+/g, '');
-                                const pageClean = page.text.replace(/\s+/g, '');
-                                const hasUtm = cleanUtm === '' || pageClean.includes(cleanUtm);
-                                const hasLandNo = cleanLandNo === '' || pageClean.includes(cleanLandNo);
+                                const hasUtm = colG_Utm === '' || hasExactNumberMatch(page.text, page.cleanText, colG_Utm);
+                                const hasLandNo = colJ_LandNo === '' || hasExactNumberMatch(page.text, page.cleanText, colJ_LandNo);
 
-                                if (hasUtm && hasLandNo && (cleanUtm !== '' || cleanLandNo !== '')) {
+                                if ((colG_Utm !== '' && hasUtm) || (colJ_LandNo !== '' && hasLandNo)) {
+                                    score += 15;
+                                    if (colG_Utm !== '' && colJ_LandNo !== '' && hasUtm && hasLandNo) {
+                                        score += 20;
+                                    }
                                     isMatched = true;
                                 }
                             }
 
                             if (isMatched) {
-                                const noticeIdx = page.text.indexOf('ยกเลิก');
-                                if (noticeIdx !== -1) {
-                                    detectedNotice = page.text.substring(noticeIdx, Math.min(noticeIdx + 120, page.text.length));
-                                } else {
-                                    detectedNotice = 'พบข้อมูลตรงกันในหน้าเอกสาร';
+                                if (page.text.includes('ยกเลิก') || page.text.includes('ประกาศ')) {
+                                    score += 50;
                                 }
 
-                                matchResult = {
-                                    found: true,
-                                    searchType: searchType,
-                                    matchedPdf: pdf.filename,
-                                    matchedPage: page.pageNum,
-                                    noticeText: detectedNotice
-                                };
-                                foundInPdf = true;
-                                break;
+                                if (score > highestScore) {
+                                    highestScore = score;
+                                    // ระบุตัวเลขเป้าหมายของแปลงนี้เพื่อดึงรายละเอียดประกาศที่อยู่ใกล้แปลงนั้นที่สุด
+                                    const targetAnchor = colA_Chanote !== '' ? colA_Chanote : (colJ_LandNo || colG_Utm);
+                                    const detectedNotice = extractContextNotice(page.text, targetAnchor);
+
+                                    bestMatch = {
+                                        found: true,
+                                        searchType: searchType,
+                                        matchedPdf: pdf.filename,
+                                        matchedPage: page.pageNum,
+                                        noticeText: detectedNotice
+                                    };
+                                }
                             }
                         }
-                        if (foundInPdf) break;
+                    }
+
+                    if (bestMatch) {
+                        matchResult = bestMatch;
                     }
                 }
 
@@ -526,7 +591,6 @@
                     ...matchResult
                 });
 
-                // Yield to UI every 50 rows so browser stays responsive on large multi-file batches
                 if (i % 50 === 0 || i === totalRows - 1) {
                     const progress = Math.round(20 + ((i + 1) / totalRows) * 80);
                     updateProgress(progress, `กำลังตรวจสอบรายการที่ ${i + 1} จาก ${totalRows}...`);
@@ -582,7 +646,6 @@
             }
 
             resultTableBody.innerHTML = '';
-            // Render up to 1,000 rows in preview table for smooth DOM performance (full data exports to Excel)
             const displayLimit = filtered.slice(0, 1000);
             
             displayLimit.forEach((item) => {
@@ -627,14 +690,12 @@
         exportExcelBtn.addEventListener('click', () => {
             if (processedResults.length === 0) return;
 
-            // Use the header from the first uploaded Excel file as base
             const baseHeader = excelFilesList[0]?.header || [];
             const maxCols = Math.max(
                 baseHeader.length,
                 ...processedResults.map(r => r.originalRow.length)
             );
 
-            // Pad baseHeader if any subsequent file had more columns
             const normalizedHeader = Array.from({ length: maxCols }, (_, idx) => baseHeader[idx] || `คอลัมน์ ${idx + 1}`);
 
             const newHeader = [
